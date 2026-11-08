@@ -1,0 +1,50 @@
+src/git.ts
+  s_4d4b6efa4908e2::t_694a1f18db5ab8 374-380
+src/message.ts
+  s_4d4b6efa4908e2::t_694a1f18db5ab8 2,420-423,428-450,452,454,460-463,466-472
+test/template.test.ts
+  s_4d4b6efa4908e2::t_ff14cbd8f94348 1-128
+README.md
+  s_4d4b6efa4908e2::t_33d44c8a77186f 156-157,199-200,222-275,324-326,363
+src/hook.ts
+  s_4d4b6efa4908e2::t_694a1f18db5ab8 16,331-332,543-547,565
+package.json
+  s_4d4b6efa4908e2::t_bab49a76269963 3
+src/types.ts
+  s_4d4b6efa4908e2::t_69003f92286a23 99-102,139-142
+src/prompt.ts
+  s_4d4b6efa4908e2::t_694a1f18db5ab8 13-14,82-90,135-144
+  s_4d4b6efa4908e2::t_a31c7ffaa6e7d5 145
+src/config.ts
+  s_4d4b6efa4908e2::t_69003f92286a23 6,126-127,147-148,254-255,265-288,335-336,391-392
+src/cli.ts
+  s_4d4b6efa4908e2::t_694a1f18db5ab8 37-38,202-203
+src/template.ts
+  s_4d4b6efa4908e2::t_153d6c8c68e15c 5,92,103-104
+  s_4d4b6efa4908e2::t_50e7c5df9531ea 1-4,6-91,93-102,105-132
+test/cli.test.ts
+  s_4d4b6efa4908e2::t_e8f44263a0d875 718-724
+  s_4d4b6efa4908e2::t_6c7303b683c09d 621-717,725-730,732
+  s_4d4b6efa4908e2::t_698bfecaaa20f8 731
+  s_4d4b6efa4908e2::t_30b38d1ac879f6 733-751
+src/commit.ts
+  s_4d4b6efa4908e2::t_694a1f18db5ab8 11,31,110,141-149,151-156,177
+package-lock.json
+  s_4d4b6efa4908e2::t_b9bab7c9286a04 3,9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "62717d05055e1012de436fa792ff33bd19a24003",
+  "prompts": {},
+  "sessions": {
+    "s_4d4b6efa4908e2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1ae54-b2b1-7290-9a70-f41ae234ac85",
+        "model": "deepseek-flash"
+      },
+      "human_author": "ZhenYi <434836402@qq.com>"
+    }
+  }
+}
