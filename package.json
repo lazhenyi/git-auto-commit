@@ -1,6 +1,6 @@
 {
   "name": "git-auto-commit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI-powered `git auto commit`: read your diff, write the commit message, commit for you.",
   "license": "MIT",
   "author": "ZhenYi",

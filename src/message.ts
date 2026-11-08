@@ -1,4 +1,5 @@
 import { PlanError } from "./errors.ts";
+import { localDate, renderTemplate } from "./template.ts";
 import type { CommitPlanItem, FileChange, Message } from "./types.ts";
 
 export const COMMIT_TYPES = [
@@ -416,29 +417,59 @@ export function normalizePlan(
 export interface FormatOptions {
   emoji?: boolean;
   typeStyle?: "conventional" | "plain";
+  /** Custom template; overrides the default header/body assembly. */
+  template?: string;
+  /** Values for {author}, {email}, {branch} and {date}. */
+  templateData?: { author?: string; email?: string; branch?: string; date?: string };
 }
 
 /** Renders a plan item into the final commit message. */
 export function formatMessage(item: CommitPlanItem, options: FormatOptions = {}): Message {
-  let subject: string;
-  if (options.typeStyle === "plain") {
-    subject = item.subject;
-  } else {
-    const scope = item.scope ? `(${item.scope})` : "";
-    const bang = item.breaking ? "!" : "";
-    const emoji = options.emoji && EMOJI[item.type] ? `${EMOJI[item.type]} ` : "";
-    subject = `${emoji}${item.type}${scope}${bang}: ${item.subject}`;
+  const scope = item.scope ?? "";
+  const emoji = options.emoji && EMOJI[item.type] ? `${EMOJI[item.type]} ` : "";
+  const header =
+    options.typeStyle === "plain"
+      ? item.subject
+      : `${emoji}${item.type}${scope ? `(${scope})` : ""}${item.breaking ? "!" : ""}: ${item.subject}`;
+
+  if (options.template) {
+    const data = options.templateData ?? {};
+    return renderTemplate(options.template, {
+      type: item.type,
+      scope,
+      scopeParens: scope ? `(${scope})` : "",
+      subject: item.subject,
+      header,
+      body: item.body ?? "",
+      breaking: item.breaking ? "!" : "",
+      emoji,
+      author: data.author ?? "",
+      email: data.email ?? "",
+      branch: data.branch ?? "",
+      date: data.date ?? localDate(),
+    });
   }
+
   return {
-    subject,
+    subject: header,
     ...(item.body ? { body: item.body } : {}),
   };
 }
 
 /** Reasons a message would be rejected by common commit linters. */
-export function validateMessage(message: Message): string[] {
+export function validateMessage(
+  message: Message,
+  options: { customTemplate?: boolean } = {},
+): string[] {
   const problems: string[] = [];
   const subject = message.subject.trim();
+
+  // A custom template may deliberately avoid Conventional Commit rules.
+  if (options.customTemplate) {
+    if (!subject) problems.push("the subject is empty");
+    return problems;
+  }
+
   if (!subject) problems.push("the subject is empty");
   if (subject.length > 72) problems.push(`the subject is ${subject.length} chars (max 72)`);
 

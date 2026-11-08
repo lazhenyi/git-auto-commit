@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_BASE_URLS, DEFAULT_MODELS } from "./ai.ts";
 import { DEFAULT_EXCLUDE } from "./diff.ts";
+import { readTemplateFile, validateTemplate } from "./template.ts";
 import { UsageError } from "./errors.ts";
 import type { CliFlags, ConfigFile, Language, Provider, Settings } from "./types.ts";
 
@@ -122,6 +123,8 @@ function envConfig(env: NodeJS.ProcessEnv): ConfigFile {
     ...(env.GAC_EXCLUDE
       ? { exclude: env.GAC_EXCLUDE.split(",").map((item) => item.trim()).filter(Boolean) }
       : {}),
+    ...(env.GAC_TEMPLATE ? { template: env.GAC_TEMPLATE } : {}),
+    ...(env.GAC_TEMPLATE_FILE ? { templateFile: env.GAC_TEMPLATE_FILE } : {}),
   };
 }
 
@@ -141,6 +144,8 @@ const KNOWN_KEYS: ReadonlySet<string> = new Set([
   "noVerify",
   "typeStyle",
   "instructions",
+  "template",
+  "templateFile",
   "exclude",
   "fallback",
   "stagedOnly",
@@ -246,6 +251,8 @@ export function resolveSettings(input: ResolveSettingsInput): ResolvedSettings {
     ...(flags.noVerify !== undefined ? { noVerify: flags.noVerify } : {}),
     ...(flags.typeStyle ? { typeStyle: flags.typeStyle } : {}),
     ...(flags.instructions ? { instructions: flags.instructions } : {}),
+    ...(flags.template ? { template: flags.template } : {}),
+    ...(flags.templateFile ? { templateFile: flags.templateFile } : {}),
     ...(flags.exclude ? { exclude: flags.exclude } : {}),
     ...(flags.fallback !== undefined ? { fallback: flags.fallback } : {}),
     ...(flags.stagedOnly !== undefined ? { stagedOnly: flags.stagedOnly } : {}),
@@ -254,6 +261,30 @@ export function resolveSettings(input: ResolveSettingsInput): ResolvedSettings {
 
   // Explicit config is the base of last resort, so flags still win over it.
   const layered: ConfigFile = { ...explicit, ...user, ...repo, ...fromEnv, ...fromFlags };
+
+  // `template` and `templateFile` describe the same thing, so the highest layer
+  // that sets either one wins as a pair.
+  let templateChoice: ConfigFile = {};
+  for (const layer of [fromFlags, fromEnv, repo, user, explicit]) {
+    const inline = typeof layer.template === "string" ? layer.template.trim() : "";
+    const file = typeof layer.templateFile === "string" ? layer.templateFile.trim() : "";
+    if (inline || file) {
+      templateChoice = inline ? { template: layer.template } : { templateFile: layer.templateFile };
+      break;
+    }
+  }
+
+  let template: string | undefined;
+  let templateFile: string | undefined;
+  if (templateChoice.template) {
+    template = templateChoice.template;
+    validateTemplate(template);
+  } else if (templateChoice.templateFile) {
+    const loaded = readTemplateFile(templateChoice.templateFile, input.root, env);
+    template = loaded.text;
+    templateFile = loaded.file;
+    validateTemplate(template);
+  }
 
   const provider = inferProvider(layered, env);
   const apiKey = resolveApiKey(layered, provider, env);
@@ -301,6 +332,8 @@ export function resolveSettings(input: ResolveSettingsInput): ResolvedSettings {
     noVerify: layered.noVerify ?? DEFAULTS.noVerify,
     typeStyle: layered.typeStyle ?? DEFAULTS.typeStyle,
     instructions: layered.instructions ?? DEFAULTS.instructions,
+    ...(template ? { template } : {}),
+    ...(templateFile ? { templateFile } : {}),
     exclude,
     fallback: layered.fallback ?? DEFAULTS.fallback,
     stagedOnly: layered.stagedOnly ?? DEFAULTS.stagedOnly,
@@ -355,6 +388,8 @@ export function redactSettings(settings: Settings): Record<string, unknown> {
     noVerify: settings.noVerify,
     typeStyle: settings.typeStyle,
     instructions: settings.instructions,
+    ...(settings.template ? { template: settings.template.replace(/\n/g, "\\n") } : {}),
+    ...(settings.templateFile ? { templateFile: settings.templateFile } : {}),
     exclude: settings.exclude,
     fallback: settings.fallback,
     stagedOnly: settings.stagedOnly,

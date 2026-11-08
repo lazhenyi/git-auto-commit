@@ -96,6 +96,10 @@ export interface Settings {
   typeStyle: "conventional" | "plain";
   /** Free-form extra instructions appended to the system prompt. */
   instructions: string;
+  /** Resolved commit template (inline text or the contents of a template file). */
+  template?: string;
+  /** Absolute path when the template came from a file. */
+  templateFile?: string;
   /** Glob patterns whose diff bodies are omitted from the prompt. */
   exclude: string[];
   /** Build a heuristic message locally if the model call fails. */
@@ -132,6 +136,10 @@ export interface ConfigFile {
   noVerify?: boolean;
   typeStyle?: "conventional" | "plain";
   instructions?: string;
+  /** Inline commit template with {placeholders}. */
+  template?: string;
+  /** Path to a commit template file (relative to the repo root, or absolute). */
+  templateFile?: string;
   exclude?: string[];
   fallback?: boolean;
   stagedOnly?: boolean;

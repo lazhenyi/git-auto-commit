@@ -10,6 +10,8 @@ export interface PromptContext {
   select: boolean;
   typeStyle: "conventional" | "plain";
   instructions?: string;
+  /** Custom commit template; the model only fills in its placeholders. */
+  template?: string;
   /** Total changed files, when the bundle was truncated. */
   totalFiles?: number;
 }
@@ -77,6 +79,15 @@ export function systemPrompt(context: PromptContext): string {
     rules.push(`Extra instructions from the user: ${context.instructions}`);
   }
 
+  if (context.template) {
+    rules.push(
+      "The commit message is rendered from a template after your answer. Fill in type, scope, subject and body; never repeat the template's static text.",
+      context.template.includes("{body}")
+        ? "A body is placed by the template, so write one when the change deserves explanation."
+        : "The template has no {body} placeholder, so keep the body empty unless it is essential.",
+    );
+  }
+
   return `${rules.join("\n")}\n\nOutput shape:\n${outputShape}`;
 }
 
@@ -118,6 +129,17 @@ export function userPrompt(context: PromptContext): string {
   if (context.bundle.truncated && context.bundle.truncatedFiles.length > 0) {
     sections.push(
       `Diff bodies omitted for: ${context.bundle.truncatedFiles.slice(0, 30).join(", ")}${context.bundle.truncatedFiles.length > 30 ? ", …" : ""}`,
+    );
+  }
+
+  if (context.template) {
+    sections.push(
+      [
+        "Commit template (static text is added by gac; fill the placeholders only):",
+        "```",
+        context.template.length > 4000 ? `${context.template.slice(0, 4000)}\n…` : context.template,
+        "```",
+      ].join("\n"),
     );
   }
 

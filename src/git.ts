@@ -371,6 +371,13 @@ export function push(cwd: string): void {
   }
 }
 
+export function gitConfigValue(cwd: string, key: string): string | undefined {
+  const result = git(["config", "--get", key], { cwd, allowFailure: true });
+  if (result.code !== 0) return undefined;
+  const value = result.stdout.trim();
+  return value || undefined;
+}
+
 export function setAlias(name: string, command: string): void {
   git(["config", "--global", "alias." + name, command]);
 }

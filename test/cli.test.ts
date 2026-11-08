@@ -618,3 +618,134 @@ test("-y is the short form of --yes: it commits without prompting", async () => 
     await server.close();
   }
 });
+
+test("a template file shapes the committed message and the prompt", async () => {
+  const server = await startFakeServer(() =>
+    planReply({
+      commits: [{ type: "feat", subject: "add templated", body: "Why it matters." }],
+    }),
+  );
+  const repo = makeRepo();
+  try {
+    repo.write(
+      "commit-template.txt",
+      "[{type}] {subject}\n\n{body}\n\nSigned-off-by: {author} <{email}>\nRefs: {branch} {date}",
+    );
+    writeFileSync(
+      join(repo.path, ".gac.json"),
+      JSON.stringify({ templateFile: "commit-template.txt" }),
+      "utf8",
+    );
+    repo.write("t.txt", "templated\n");
+
+    const result = await runCli(["--yes", "--base-url", server.baseUrl, ...MODEL_FLAGS], {
+      cwd: repo.path,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(repo.git("log", "-1", "--pretty=%s"), "[feat] add templated");
+    const body = repo.git("log", "-1", "--pretty=%b");
+    assert.match(body, /Why it matters\./);
+    assert.match(body, /Signed-off-by: Test User <test@example\.com>/);
+    assert.match(body, /Refs: main \d{4}-\d{2}-\d{2}/);
+
+    const prompt = (server.requests[0]?.body.messages as { content: string }[])[1]?.content ?? "";
+    assert.match(prompt, /Commit template/);
+    assert.match(prompt, /Signed-off-by/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("--template-text overrides a repository template", async () => {
+  const server = await startFakeServer(() =>
+    planReply({ commits: [{ type: "fix", subject: "override me", body: "ignored body" }] }),
+  );
+  const repo = makeRepo();
+  try {
+    repo.write("commit-template.txt", "[{type}] {subject}");
+    writeFileSync(
+      join(repo.path, ".gac.json"),
+      JSON.stringify({ templateFile: "commit-template.txt" }),
+      "utf8",
+    );
+    repo.write("x.txt", "x\n");
+
+    const result = await runCli(
+      ["--yes", "--template-text", "CUSTOM: {subject}", "--base-url", server.baseUrl, ...MODEL_FLAGS],
+      { cwd: repo.path },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(repo.git("log", "-1", "--pretty=%s"), "CUSTOM: override me");
+    assert.equal(repo.git("log", "-1", "--pretty=%b"), "");
+  } finally {
+    await server.close();
+  }
+});
+
+test("config reports the resolved template and rejects a missing template file", async () => {
+  const repo = makeRepo();
+  repo.write("tpl.txt", "{header}");
+  writeFileSync(join(repo.path, ".gac.json"), JSON.stringify({ templateFile: "tpl.txt" }), "utf8");
+
+  const config = await runCli(["config", "--json"], { cwd: repo.path });
+  assert.equal(config.status, 0, config.stderr);
+  const resolved = JSON.parse(config.stdout) as { template: string; templateFile: string };
+  assert.equal(resolved.template, "{header}");
+  assert.equal(resolved.templateFile, join(repo.path, "tpl.txt"));
+
+  writeFileSync(join(repo.path, ".gac.json"), JSON.stringify({ templateFile: "missing.txt" }), "utf8");
+  const missing = await runCli(["config"], { cwd: repo.path });
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /Could not read commit template/);
+
+  writeFileSync(join(repo.path, ".gac.json"), JSON.stringify({ template: "no placeholder" }), "utf8");
+  const invalid = await runCli(["config"], { cwd: repo.path });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /must contain \{subject\} or \{header\}/);
+});
+
+test("hook install quotes template arguments and absolutises template files", async () => {
+  const home = mkdtempSync(join(tmpdir(), "gac-tpl-home-"));
+  const env = { HOME: home, XDG_CONFIG_HOME: join(home, ".config"), GAC_BIN: "/opt/gac" };
+  const repo = makeRepo();
+  repo.write("tpl.txt", "[{type}] {subject}");
+
+  const inline = await runCli(
+    ["hook", "install", "--agent", "claude", "--template-text", "X {subject} Y"],
+    { cwd: repo.path, env },
+  );
+  assert.equal(inline.status, 0, inline.stderr);
+  const readCommand = (): string => {
+    const parsed = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8")) as {
+      hooks: { Stop: { hooks: { command: string }[] }[] };
+    };
+    return parsed.hooks.Stop.flatMap((group) => group.hooks.map((hook) => hook.command)).join("\n");
+  };
+  assert.match(readCommand(), /--template-text "X \{subject\} Y"/);
+
+  const file = await runCli(["hook", "install", "--agent", "claude", "--template", "tpl.txt"], {
+    cwd: repo.path,
+    env,
+  });
+  assert.equal(file.status, 0, file.stderr);
+  assert.ok(readCommand().includes(`--template ${repo.path}/tpl.txt`), readCommand());
+});
+
+test("template precedence: flag > env > repo", async () => {
+  const repo = makeRepo();
+  writeFileSync(join(repo.path, ".gac.json"), JSON.stringify({ template: "[repo] {subject}" }), "utf8");
+
+  const fromEnv = await runCli(["config", "--json"], {
+    cwd: repo.path,
+    env: { GAC_TEMPLATE: "[env] {subject}" },
+  });
+  assert.equal(fromEnv.status, 0, fromEnv.stderr);
+  assert.equal((JSON.parse(fromEnv.stdout) as { template: string }).template, "[env] {subject}");
+
+  const fromFlag = await runCli(["config", "--json", "--template-text", "[flag] {subject}"], {
+    cwd: repo.path,
+    env: { GAC_TEMPLATE: "[env] {subject}" },
+  });
+  assert.equal(fromFlag.status, 0, fromFlag.stderr);
+  assert.equal((JSON.parse(fromFlag.stdout) as { template: string }).template, "[flag] {subject}");
+});

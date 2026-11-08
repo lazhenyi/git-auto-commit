@@ -153,6 +153,8 @@ gac hook status                 Show which agents have the hook installed
 | `--max-diff-chars <n>` | Diff budget in characters (default: 48000) |
 | `--exclude <glob,...>` | Extra paths whose diff body is omitted |
 | `--instructions <text>` | Extra instructions for the model |
+| `--template <path>` | Render messages from a template file (see below) |
+| `--template-text <text>` | Render messages from an inline template |
 | `--fallback` | Build a heuristic message locally if the model call fails |
 | `--no-verify` | Skip git hooks |
 | `--json` | Machine-readable output on stdout (human logs go to stderr) |
@@ -194,7 +196,8 @@ because the file may be committed.
 Environment variables: `GAC_API_KEY`, `GAC_BASE_URL`, `GAC_MODEL`, `GAC_PROVIDER`,
 `GAC_LANGUAGE`, `GAC_MAX_DIFF_CHARS`, `GAC_INSTRUCTIONS`, `GAC_EXCLUDE`, `GAC_TEMPERATURE`,
 `GAC_MAX_TOKENS`, `GAC_TIMEOUT_MS`, `GAC_SPLIT`, `GAC_SELECT`, `GAC_EMOJI`, `GAC_NO_VERIFY`,
-`GAC_FALLBACK`, `GAC_PUSH`, `GAC_DEBUG`, and `GAC_HOOK_DISABLED=1` to pause agent hooks.
+`GAC_FALLBACK`, `GAC_PUSH`, `GAC_TEMPLATE`, `GAC_TEMPLATE_FILE`, `GAC_DEBUG`, and
+`GAC_HOOK_DISABLED=1` to pause agent hooks.
 
 ## Selective and batched commits
 
@@ -215,6 +218,60 @@ gac --split           # commit everything, but in several commits
 - If the model selects no file, `gac` fails instead of falling back to "commit everything".
 
 Selection is file-level: `gac` does not split hunks inside a single file.
+
+## Custom commit templates
+
+Commit messages can be rendered from a template. Point `gac` at a file (recommended) or pass the
+template inline:
+
+```bash
+gac --template .gac/commit-template.txt
+gac --template-text "[{type}] {subject}"
+```
+
+```json
+{
+  "templateFile": ".gac/commit-template.txt"
+}
+```
+
+A template is plain text with placeholders. For example:
+
+```text
+{header}
+
+{body}
+
+Signed-off-by: {author} <{email}>
+Refs: {branch} {date}
+```
+
+| Placeholder | Value |
+| --- | --- |
+| `{type}` | `feat`, `fix`, `docs`, ... |
+| `{scope}` | Scope without parentheses, or empty |
+| `{scopeParens}` | `(api)` or empty |
+| `{subject}` | The model's subject line, without a type prefix |
+| `{header}` | The default `type(scope): subject` line (honours `--plain` and `--emoji`) |
+| `{body}` | The model's body, or empty |
+| `{breaking}` | `!` for breaking changes, otherwise empty |
+| `{emoji}` | The type emoji plus a space, or empty |
+| `{author}` / `{email}` | `git config user.name` / `user.email` |
+| `{branch}` | Current branch |
+| `{date}` | Local date as `YYYY-MM-DD` |
+
+Details:
+
+- The template must contain `{subject}` or `{header}`.
+- Static template text is never asked from the model; the model receives the template and fills in
+  the fields, so it will not repeat trailers or footer lines.
+- A template controls the whole message: `--plain` and `--emoji` affect only `{header}` and
+  `{emoji}`, and the conventional-commit lint warnings are skipped.
+- Empty `()` or `[]` left behind by an empty scope are removed; unknown placeholders stay untouched.
+- Paths in `templateFile` / `--template` are resolved against the repository root (absolute paths and
+  `~/` work too). When installing agent hooks, relative paths are converted to absolute ones.
+- `template` (inline) wins over `templateFile` in the same layer; higher configuration layers win
+  over lower ones.
 
 ## Agent hooks
 
@@ -264,9 +321,9 @@ Safety rules:
 4. **Validate** — JSON is extracted from prose or code fences; type aliases are normalised, subjects
    are trimmed and length-limited, scopes lower-cased, paths must exist in the real change set, and
    files the model forgot are appended to the last commit.
-5. **Commit** — the default mode stages everything and commits. `--split` uses per-file pathspecs;
-   `--select` stages and commits only the chosen files. Deletions, renames and staged deletions are
-   handled explicitly.
+5. **Render and commit** — the plan is rendered through the optional commit template; the default
+   mode stages everything and commits. `--split` uses per-file pathspecs, `--select` stages and
+   commits only the chosen files. Deletions, renames and staged deletions are handled explicitly.
 
 ## Scripting and CI
 
@@ -303,6 +360,7 @@ JSON.
   staging.
 - No `--amend` or rebase support; `gac` only creates new commits.
 - `--select` is file-level and cannot pick individual hunks.
+- Templates are plain placeholder substitution: no conditionals beyond empty-scope cleanup.
 - Commit quality depends on the model; tune `--max-diff-chars` to control cost and context.
 
 ## Development

@@ -8,6 +8,7 @@ import {
   currentBranch,
   collectChanges,
   commit,
+  gitConfigValue,
   hasStagedChanges,
   push as pushBranch,
   pathsWithUnstagedChanges,
@@ -27,6 +28,7 @@ import {
   validateMessage,
 } from "./message.ts";
 import { buildMessages } from "./prompt.ts";
+import { localDate } from "./template.ts";
 import type { CommitPlanItem, Message, Settings } from "./types.ts";
 import { color, confirm, log, printMessage, setJsonMode } from "./ui.ts";
 
@@ -105,6 +107,7 @@ export async function runAutoCommit(options: RunOptions): Promise<RunResult> {
     language,
     split: settings.split,
     select: settings.select,
+    ...(settings.template ? { template: settings.template } : {}),
     typeStyle: settings.typeStyle,
     instructions: settings.instructions,
   });
@@ -135,8 +138,22 @@ export async function runAutoCommit(options: RunOptions): Promise<RunResult> {
     if (plan.length === 0) throw error;
   }
 
+  const templateData = settings.template
+    ? {
+        author: gitConfigValue(root, "user.name") ?? env.GIT_AUTHOR_NAME ?? "",
+        email: gitConfigValue(root, "user.email") ?? env.GIT_AUTHOR_EMAIL ?? "",
+        branch,
+        date: localDate(),
+      }
+    : undefined;
+
   let formatted = plan.map((item) =>
-    formatMessage(item, { emoji: settings.emoji, typeStyle: settings.typeStyle }),
+    formatMessage(item, {
+      emoji: settings.emoji,
+      typeStyle: settings.typeStyle,
+      ...(settings.template ? { template: settings.template } : {}),
+      ...(templateData ? { templateData } : {}),
+    }),
   );
 
   // `git commit -- <path>` takes content from the work tree, so splitting a
@@ -157,7 +174,7 @@ export async function runAutoCommit(options: RunOptions): Promise<RunResult> {
 
   // A quality gate that never blocks: printf-style warnings only.
   for (const message of formatted) {
-    const problems = validateMessage(message);
+    const problems = validateMessage(message, { customTemplate: Boolean(settings.template) });
     if (problems.length > 0) log.warn(`Commit message check: ${problems.join("; ")}.`);
   }
 

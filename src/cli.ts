@@ -34,6 +34,8 @@ const VALUE_FLAGS: Record<string, keyof CliFlags> = {
   "--timeout": "timeoutMs",
   "--timeout-ms": "timeoutMs",
   "--instructions": "instructions",
+  "--template": "templateFile",
+  "--template-text": "template",
   "--exclude": "exclude",
   "--type": "forceType",
   "--scope": "forceScope",
@@ -197,6 +199,8 @@ ${color.bold("Message")}
       --type <type>             Force feat/fix/docs/... for every commit
       --scope <scope>           Force a scope
       --instructions <text>     Extra instructions for the model
+      --template <path>         Commit template file using {placeholders}
+      --template-text <text>    Inline commit template
       --exclude <glob,...>      Extra paths whose diff body is omitted
 
 ${color.bold("Behaviour")}

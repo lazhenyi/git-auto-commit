@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { git, repoRoot } from "./git.ts";
 import { resolveSettings } from "./config.ts";
+import { resolveTemplatePath } from "./template.ts";
 import { runAutoCommit } from "./commit.ts";
 import { GacError, UsageError } from "./errors.ts";
 import type { CliFlags, Settings } from "./types.ts";
@@ -327,6 +328,8 @@ const COMMIT_VALUE_FLAGS: [keyof CliFlags, string][] = [
   ["forceType", "--type"],
   ["forceScope", "--scope"],
   ["instructions", "--instructions"],
+  ["templateFile", "--template"],
+  ["template", "--template-text"],
 ];
 
 /** Turns the flags given to `hook install` into arguments for `hook run`. */
@@ -537,7 +540,11 @@ function ensureCodexHooksEnabled(env: NodeJS.ProcessEnv): string | undefined {
 export function installHooks(options: HookInstallOptions): HookInstallResult[] {
   const env = options.env ?? process.env;
   const bin = options.bin ?? resolveSelfCommand(env);
-  const commitArgs = commitFlagArgs(options.flags);
+  const embedFlags: CliFlags = { ...options.flags };
+  if (embedFlags.templateFile && embedFlags.templateFile.trim()) {
+    embedFlags.templateFile = resolveTemplatePath(embedFlags.templateFile, options.root, env);
+  }
+  const commitArgs = commitFlagArgs(embedFlags);
   const results: HookInstallResult[] = [];
 
   for (const agent of options.agents) {
@@ -555,8 +562,7 @@ export function installHooks(options: HookInstallOptions): HookInstallResult[] {
       agent === "claude"
         ? claudeConfigPath(options.scope, options.root, env)
         : codexConfigPath(options.scope, options.root, env);
-    const command = [shellQuote(bin), "hook", "run", "--agent", agent, ...commitArgs]
-      .map((part) => part)
+    const command = [shellQuote(bin), "hook", "run", "--agent", agent, ...commitArgs.map((arg) => shellQuote(arg))]
       .join(" ");
     const action = mergeStopHook(file, agent, command);
     results.push({
