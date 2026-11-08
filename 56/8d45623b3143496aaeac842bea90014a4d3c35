@@ -1,0 +1,21 @@
+install.sh
+  s_4d4b6efa4908e2::t_255de8b1a1981e 95,98,105-107,109-110
+.github/workflows/release.yml
+  s_4d4b6efa4908e2::t_255de8b1a1981e 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "568d45623b3143496aaeac842bea90014a4d3c35",
+  "prompts": {},
+  "sessions": {
+    "s_4d4b6efa4908e2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1ae54-b2b1-7290-9a70-f41ae234ac85",
+        "model": "deepseek-flash"
+      },
+      "human_author": "ZhenYi <434836402@qq.com>"
+    }
+  }
+}
