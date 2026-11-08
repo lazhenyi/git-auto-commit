@@ -599,3 +599,22 @@ test("--select never sweeps up files that were already staged", async () => {
     await server.close();
   }
 });
+
+test("-y is the short form of --yes: it commits without prompting", async () => {
+  const server = await startFakeServer(() =>
+    planReply({ commits: [{ type: "feat", subject: "short yes flag" }] }),
+  );
+  const repo = makeRepo();
+  try {
+    repo.write("short.txt", "yes\n");
+    const result = await runCli(["-y", "--base-url", server.baseUrl, ...MODEL_FLAGS], {
+      cwd: repo.path,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(repo.subjects().at(-1), "feat: short yes flag");
+    assert.doesNotMatch(result.stdout, /Commit\?/);
+    assert.doesNotMatch(result.stdout, /\[Y\/n/);
+  } finally {
+    await server.close();
+  }
+});
