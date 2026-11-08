@@ -65,9 +65,9 @@ while [ $# -gt 0 ]; do
 done
 
 if command -v curl >/dev/null 2>&1; then
-  download() { curl -fsSL "$1" -o "$2"; }
+  download() { curl -fsSL --retry 3 --retry-delay 1 --retry-connrefused "$1" -o "$2"; }
 elif command -v wget >/dev/null 2>&1; then
-  download() { wget -qO "$2" "$1"; }
+  download() { wget -qO "$2" --tries=3 --timeout=30 "$1"; }
 else
   die "curl or wget is required"
 fi
