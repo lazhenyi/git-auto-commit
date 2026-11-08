@@ -159,7 +159,8 @@ gac config --json        # 机器可读
 环境变量：`GAC_API_KEY`、`GAC_BASE_URL`、`GAC_MODEL`、`GAC_PROVIDER`、`GAC_LANGUAGE`、
 `GAC_MAX_DIFF_CHARS`、`GAC_INSTRUCTIONS`、`GAC_EXCLUDE`、`GAC_TEMPERATURE`、
 `GAC_MAX_TOKENS`、`GAC_TIMEOUT_MS`、`GAC_SPLIT`、`GAC_SELECT`、`GAC_EMOJI`、
-`GAC_NO_VERIFY`、`GAC_FALLBACK`、`GAC_PUSH`、`GAC_DEBUG`。
+`GAC_NO_VERIFY`、`GAC_FALLBACK`、`GAC_PUSH`、`GAC_DEBUG`；`GAC_HOOK_DISABLED=1`
+可临时关闭 agent hooks。
 
 ## 选择性提交与分批提交
 
@@ -179,6 +180,40 @@ gac --split               # 全部改动，但拆成多个 commit
 - 模型一个文件都没选时直接报错，不会退化成“提交全部”。
 
 选择粒度是**文件级**：不做同一个文件内部的 hunk 级拆分，也不支持交互式逐块选择。
+
+## Agent hooks：每轮结束自动提交
+
+`gac` 可以作为 Claude Code、Codex、OpenCode 的收尾钩子：一轮回复结束后自动读取 diff 并提交，
+没有改动就立即退出。
+
+```bash
+gac hook install                    # 三个 agent，用户级（默认）
+gac hook install --agent claude     # 只装一个
+gac hook install --agent all --select --split   # 把行为参数一起固化进 hook
+gac hook install --agent codex --project       # 只对当前仓库生效
+gac hook status                     # 查看安装状态
+gac hook uninstall --agent all      # 卸载
+```
+
+| Agent | 用户级位置 | 项目级位置 | 触发事件 |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `.claude/settings.json` | `Stop` |
+| Codex | `~/.codex/hooks.json` | `.codex/hooks.json` | `Stop` |
+| OpenCode | `~/.config/opencode/plugins/gac-auto-commit.ts` | `.opencode/plugins/gac-auto-commit.ts` | `session.idle`（v2 插件，兼容 v1 `server`） |
+
+安装时会**合并**而不是覆盖：保留你已有的 hooks，重复安装只替换 gac 自己的那条，并在原文件旁生成
+`.gac.bak` 备份。hook 里写入的是 gac 可执行文件的绝对路径（编译版即 `~/.local/bin/gac`）。
+
+安全策略：
+
+- 只在有改动时调用模型；干净工作区直接退出，不产生 API 费用。
+- 进行中的 merge / rebase / cherry-pick / revert / bisect、detached HEAD 一律跳过。
+- 用 `.git/gac-hook.lock` 防止并发重复提交（10 分钟自动过期）。
+- Claude 的 `stop_hook_active` 会跳过，避免递归触发。
+- hook 不向 stdout 输出内容，出错也返回 0，绝不打断 agent；结果写到 `.git/gac-hook.log`。
+- 临时关闭：`export GAC_HOOK_DISABLED=1`。
+- Codex 需要开启 hooks 特性（`[features] hooks = true`），缺失时安装会提示。
+- 想在 hook 里用选择性/分批提交，安装时直接加参数：`gac hook install --select`、`--split`、`--lang zh` 等。
 
 ## 它具体做了什么
 
@@ -226,6 +261,7 @@ gac --yes --push
 - `--split` 会让每个 commit 单独触发一次 pre-commit hook，lint-staged 之类的工具需要能接受部分暂存。
 - 没有 `--amend` / rebase 能力，它只负责新提交。
 - `--select` 是文件级选择，不会拆分同一个文件里的不同改动。
+- hook 自动提交意味着每轮改动都会进入 git 历史；需要人工把关时先关掉 hook 或加 `--dry-run`。
 - diff 是 prompt 的一部分，模型输出质量取决于模型本身；用 `--max-diff-chars` 控制成本。
 
 ## 开发

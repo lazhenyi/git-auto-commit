@@ -186,28 +186,35 @@ export interface RunCliOptions {
   timeout?: number;
   /** Run a compiled executable instead of the TypeScript entry point. */
   entry?: string;
+  /** Write this to stdin (hook payloads). */
+  input?: string;
 }
 
 export function runCli(args: string[], options: RunCliOptions = { cwd: process.cwd() }): Promise<CliResult> {
   return new Promise((resolvePromise, reject) => {
+    const stdio: ["pipe" | "ignore", "pipe", "pipe"] = options.input
+      ? ["pipe", "pipe", "pipe"]
+      : ["ignore", "pipe", "pipe"];
     const child = options.entry
       ? spawn(options.entry, args, {
           cwd: options.cwd,
           env: cleanEnv(options.env),
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio,
         })
       : spawn(process.execPath, [CLI, ...args], {
           cwd: options.cwd,
           env: cleanEnv(options.env),
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio,
         });
+
+    if (options.input) child.stdin?.end(options.input);
 
     let stdout = "";
     let stderr = "";
-    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
       stdout += chunk;
     });
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
       stderr += chunk;
     });
 

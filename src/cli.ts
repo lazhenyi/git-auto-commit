@@ -7,6 +7,15 @@ import { runAutoCommit } from "./commit.ts";
 import { resolveSettings, redactSettings, REPO_CONFIG_FILES, userConfigPath } from "./config.ts";
 import { GacError, UsageError } from "./errors.ts";
 import { repoRoot, setAlias, unsetAlias } from "./git.ts";
+import {
+  agentsFrom,
+  hookLogPath,
+  hookStatus,
+  installHooks,
+  parseAgent,
+  runHook,
+  uninstallHooks,
+} from "./hook.ts";
 import type { CliFlags, Provider } from "./types.ts";
 import { color, log } from "./ui.ts";
 import { VERSION } from "./version.ts";
@@ -28,6 +37,7 @@ const VALUE_FLAGS: Record<string, keyof CliFlags> = {
   "--exclude": "exclude",
   "--type": "forceType",
   "--scope": "forceScope",
+  "--agent": "agent",
   "--config": "configPath",
 };
 
@@ -43,6 +53,7 @@ const BOOLEAN_FLAGS: Record<string, { key: keyof CliFlags; value: boolean }> = {
   "--no-batches": { key: "split", value: false },
   "--select": { key: "select", value: true },
   "--no-select": { key: "select", value: false },
+  "--strict": { key: "strict", value: true },
   "--emoji": { key: "emoji", value: true },
   "--no-emoji": { key: "emoji", value: false },
   "--no-verify": { key: "noVerify", value: true },
@@ -93,6 +104,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
 
     const [name, inline] = arg.includes("=") ? splitInline(arg) : [arg, undefined];
+
+    if (name === "--user" || name === "--project") {
+      flags.hookScope = name === "--user" ? "user" : "project";
+      continue;
+    }
 
     if (TYPE_STYLE_FLAGS.has(name)) {
       flags.typeStyle = name === "--plain" ? "plain" : "conventional";
@@ -152,6 +168,11 @@ ${color.bold("Usage")}
   gac config                    Show the resolved configuration (API key masked)
   gac alias install [name]      Alias \`git <name>\` (default: auto-commit) to gac
   gac alias uninstall [name]    Remove that alias
+  gac hook install [options]    Auto-commit after each agent turn (Claude Code,
+                                Codex, OpenCode) — see "Agent hooks" below
+  gac hook uninstall [options]  Remove those hooks
+  gac hook status               Show which agents have the hook installed
+  gac hook run --agent <name>   Internal entry point used by the hooks
 
 ${color.bold("Scope")}
   -a, --all                     Commit the whole work tree (default)
@@ -190,9 +211,18 @@ ${color.bold("Behaviour")}
       --version, -v             Print the version
       --help, -h                Show this help
 
+${color.bold("Agent hooks")}
+      --agent <name>            claude, codex, opencode, or all (default: all)
+      --user                    Install for the current user (default)
+      --project                 Install into this repository only
+    Commit behaviour flags (--split, --select, --emoji, --lang, ...) are baked
+    into the generated hook. Runs after a turn ends, skips merges/rebases and
+    concurrent runs, logs to .git/gac-hook.log.
+
 ${color.bold("Environment")}
   GAC_API_KEY, GAC_BASE_URL, GAC_MODEL, GAC_PROVIDER, GAC_LANGUAGE,
   GAC_MAX_DIFF_CHARS, GAC_INSTRUCTIONS, GAC_EXCLUDE, OPENAI_API_KEY, ANTHROPIC_API_KEY
+  GAC_HOOK_DISABLED=1 disables auto-commit hooks without uninstalling them.
 
 ${color.bold("Config files")}
   ~/.config/git-auto-commit/config.json      user defaults
@@ -236,6 +266,71 @@ function initConfig(root: string, force: boolean): number {
   return 0;
 }
 
+async function hookCommand(positionals: string[], flags: CliFlags): Promise<number> {
+  const sub = (positionals[0] ?? "status").toLowerCase();
+
+  if (sub === "run") {
+    const agent = parseAgent(flags.agent ?? process.env.GAC_HOOK_AGENT);
+    if (agent === "all") {
+      throw new UsageError("`gac hook run` needs a concrete agent.", "Use --agent claude, codex or opencode.");
+    }
+    const payload = positionals.slice(1).find((item) => item.trim().startsWith("{"));
+    const result = await runHook({
+      agent,
+      flags,
+      ...(payload ? { stdin: payload } : {}),
+      strict: flags.strict === true,
+    });
+    if (flags.debug === true || process.env.GAC_HOOK_DEBUG) log.info(color.gray(result.log));
+    return result.code;
+  }
+
+  const scope = flags.hookScope ?? "user";
+  const agents = agentsFrom(flags.agent);
+  const root = scope === "project" ? repoRoot(process.cwd()) : process.cwd();
+
+  if (sub === "install") {
+    const results = installHooks({ agents, scope, root, flags });
+    for (const result of results) {
+      log.success(`${result.agent}: ${result.action} → ${result.file}`);
+      if (result.note) log.warn(result.note);
+    }
+    const logPath = hookLogPath(root);
+    if (logPath) log.info(color.gray(`Hook output is appended to ${logPath}`));
+    return 0;
+  }
+
+  if (sub === "uninstall" || sub === "remove") {
+    const results = uninstallHooks({ agents, scope, root });
+    for (const result of results) {
+      log.success(`${result.agent}: ${result.action} → ${result.file}`);
+    }
+    return 0;
+  }
+
+  if (sub === "status") {
+    for (const entry of hookStatus(root)) {
+      const mark = entry.installed
+        ? color.green(`✔ installed (${entry.scope})`)
+        : color.gray("· not installed");
+      log.info(`  ${entry.agent.padEnd(9)} ${mark.padEnd(30)} ${color.gray(entry.file)}`);
+    }
+    let logPath: string | undefined;
+    try {
+      logPath = hookLogPath(repoRoot(process.cwd()));
+    } catch {
+      logPath = undefined;
+    }
+    if (logPath) log.info(color.gray(`  log       ${logPath}`));
+    return 0;
+  }
+
+  throw new UsageError(
+    `Unknown hook subcommand "${sub}".`,
+    "Use `gac hook install`, `gac hook uninstall`, `gac hook status` or `gac hook run`.",
+  );
+}
+
 function aliasCommand(subcommand: string | undefined, name = "auto-commit"): number {
   if (subcommand === "uninstall" || subcommand === "remove") {
     unsetAlias(name);
@@ -273,6 +368,10 @@ async function main(argv: string[]): Promise<number> {
 
   if (command === "alias") {
     return aliasCommand(positionals[0], positionals[1]);
+  }
+
+  if (command === "hook") {
+    return hookCommand(positionals, flags);
   }
 
   if (command === "config") {

@@ -150,6 +150,9 @@ export interface CliFlags extends Partial<ConfigFile> {
   help?: boolean;
   version?: boolean;
   force?: boolean;
+  agent?: string;
+  hookScope?: "user" | "project";
+  strict?: boolean;
   command?: string;
   subcommand?: string;
   positionals?: string[];
