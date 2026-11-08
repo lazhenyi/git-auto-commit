@@ -1,0 +1,48 @@
+{
+  "name": "git-auto-commit",
+  "version": "0.1.0",
+  "description": "AI-powered `git auto commit`: read your diff, write the commit message, commit for you.",
+  "license": "MIT",
+  "author": "ZhenYi",
+  "type": "module",
+  "bin": {
+    "gac": "dist/cli.js",
+    "git-auto-commit": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "node src/cli.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:bin": "node scripts/build-binary.ts",
+    "build:bin:all": "node scripts/build-binary.ts --all",
+    "test:binary": "node --test test/binary.test.ts"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "ai",
+    "llm",
+    "conventional-commits",
+    "cli",
+    "automation"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
