@@ -44,5 +44,13 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lazhenyi/git-auto-commit.git"
+  },
+  "homepage": "https://github.com/lazhenyi/git-auto-commit#readme",
+  "bugs": {
+    "url": "https://github.com/lazhenyi/git-auto-commit/issues"
   }
 }

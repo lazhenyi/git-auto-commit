@@ -1,15 +1,12 @@
-# git-auto-commit (`gac`)
+# gac — git auto commit
 
-读 diff → 让 AI 写 commit message → 直接提交。一条命令搞定：
+[![CI](https://github.com/lazhenyi/git-auto-commit/actions/workflows/ci.yml/badge.svg)](https://github.com/lazhenyi/git-auto-commit/actions/workflows/ci.yml)
+[![Release](https://github.com/lazhenyi/git-auto-commit/actions/workflows/release.yml/badge.svg)](https://github.com/lazhenyi/git-auto-commit/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-```bash
-gac
-```
-
-它会把工作区的改动（含未跟踪文件）整理成 unified diff，交给任意 OpenAI 兼容接口
-（OpenAI、DeepSeek、Moonshot、OpenRouter、Ollama、vLLM、自建网关……）或 Anthropic，
-生成 [Conventional Commits](https://www.conventionalcommits.org/) 格式的提交信息，确认后提交。
-需要时还能让模型把一次改动拆成多个独立 commit。
+`gac` reads your diff, asks a model for a [Conventional Commit](https://www.conventionalcommits.org/),
+and commits for you. It can also split one change into several commits, let the model pick which
+files are ready, and run as a turn-end hook for Claude Code, Codex and OpenCode.
 
 ```
 › Reading changes in /path/to/repo
@@ -26,118 +23,155 @@ gac
 ✔ 4f2a9c1 ✨ feat(api): add retry with backoff to login
 ```
 
-## 安装
+## Install
+
+One line (Linux and macOS):
 
 ```bash
-npm install -g git-auto-commit
-# 或从源码
-npm install && npm run build && npm link
+curl -fsSL https://raw.githubusercontent.com/lazhenyi/git-auto-commit/main/install.sh | sh
 ```
 
-要求 Node.js ≥ 20.11；直接从源码运行测试需要 ≥ 22.6（Node 原生执行 TypeScript）。
+The script downloads the latest release for your platform, verifies its SHA-256 checksum when
+available, installs it to `~/.local/bin/gac`, and prints the next steps. The binary embeds the Bun
+runtime, so it needs **neither Node.js nor Bun** at runtime — only `git`.
 
-也可以编译成不依赖 Node 的单文件可执行程序，见下一节。
-
-## 编译为可执行文件
-
-用 [Bun](https://bun.sh) 的 `--compile` 把 CLI 和运行时打包成一个文件，产物运行时**不需要 Node 也不需要 Bun**：
+Customise the install:
 
 ```bash
-npm run build:bin         # 当前平台 → bin/gac（Windows 为 bin/gac.exe）
-npm run build:bin:all     # 交叉编译全部平台
-./bin/gac --version
+# install a specific version into a custom directory
+curl -fsSL https://raw.githubusercontent.com/lazhenyi/git-auto-commit/main/install.sh \
+  | sh -s -- --version v0.1.0 --dir /usr/local/bin
+
+# or download the script first
+curl -fsSLO https://raw.githubusercontent.com/lazhenyi/git-auto-commit/main/install.sh
+sh install.sh --dir "$HOME/bin"
 ```
 
-自定义目标 / 输出目录 / 压缩：
-
-```bash
-node scripts/build-binary.ts --target bun-linux-arm64 --target bun-darwin-arm64
-node scripts/build-binary.ts --outdir release --minify
-```
-
-| 目标 | 说明 |
+| Environment variable | Meaning |
 | --- | --- |
-| `bun-linux-x64` / `bun-linux-arm64` | Linux |
-| `bun-darwin-x64` / `bun-darwin-arm64` | macOS |
-| `bun-windows-x64` | Windows（`gac.exe`） |
+| `GAC_INSTALL_DIR` | Install directory (default: `~/.local/bin`; same as `--dir`) |
+| `GAC_VERSION` | Release to install, e.g. `v0.1.0` (default: latest) |
+| `GAC_REPO` | `owner/repo` override, useful for forks |
 
-注意事项：
+### Prebuilt binaries
 
-- 每个产物约 **100 MB**，因为内嵌了 Bun 运行时；版本号在编译时通过 `--define __GAC_VERSION__` 注入。
-- 运行时仍然需要系统里有 `git`（这是它唯一的外部依赖）。
-- macOS 首次运行如被 Gatekeeper 拦截：`codesign --force --sign - bin/gac`。
-- 交叉编译不需要目标平台的机器，但 Bun 会为每个目标下载对应运行时（首次较慢）。
-- `bin/` 已加入 `.gitignore`，需要分发时上传到 Release 而不是提交进仓库。
+Every release ships standalone executables:
 
-## 快速开始
+| Platform | Asset |
+| --- | --- |
+| Linux x64 | `gac-linux-x64` |
+| Linux arm64 | `gac-linux-arm64` |
+| macOS Intel | `gac-darwin-x64` |
+| macOS Apple Silicon | `gac-darwin-arm64` |
+| Windows x64 | `gac-windows-x64.exe` |
+
+Download them from the [releases page](https://github.com/lazhenyi/git-auto-commit/releases).
+On Windows, rename the file to `gac.exe`, put it somewhere on `PATH`, and use it from PowerShell.
+
+macOS may quarantine a downloaded binary. If Gatekeeper complains:
 
 ```bash
-export GAC_API_KEY=sk-...        # 或 OPENAI_API_KEY / ANTHROPIC_API_KEY
-gac --dry-run                    # 先看看会提交什么
-gac                              # 确认后提交
-gac -y                           # 不再询问
+codesign --force --sign - ~/.local/bin/gac
 ```
 
-想用 `git auto-commit` 这种子命令写法：
+### From source
+
+Requires Node.js ≥ 20.11. Building a standalone binary additionally requires
+[Bun](https://bun.sh).
 
 ```bash
-gac alias install                # git config --global alias.auto-commit '!gac'
+git clone https://github.com/lazhenyi/git-auto-commit.git
+cd git-auto-commit
+npm ci
+npm run build          # dist/ + type declarations
+npm run build:bin      # bin/gac, a self-contained executable
+npm run build:bin:all  # cross-compile for every supported platform
+```
+
+## Quick start
+
+```bash
+export GAC_API_KEY=sk-...   # or OPENAI_API_KEY / ANTHROPIC_API_KEY
+gac --dry-run               # see what would be committed
+gac                         # review, confirm, commit
+gac -y                      # skip the confirmation
+```
+
+Prefer a `git` subcommand? Install an alias:
+
+```bash
+gac alias install           # git config --global alias.auto-commit '!gac'
 git auto-commit -y
 ```
 
-## 接入模型
+`gac -y` never prompts. In a non-interactive environment (stdin is not a TTY), `gac` aborts unless
+`--yes` is given.
 
-默认走 OpenAI 兼容的 `/chat/completions`，因此只要改 `--base-url` 就能换供应商。
+## Providers
 
-| 场景 | 配置 |
+`gac` talks to any OpenAI-compatible `/chat/completions` endpoint, plus Anthropic's Messages API.
+Point `GAC_BASE_URL` at your provider and set `GAC_MODEL`:
+
+| Provider | Configuration |
 | --- | --- |
-| OpenAI | `GAC_API_KEY=sk-...`（默认 base URL） |
-| DeepSeek | `GAC_BASE_URL=https://api.deepseek.com/v1`　`GAC_MODEL=deepseek-chat` |
-| Moonshot | `GAC_BASE_URL=https://api.moonshot.cn/v1`　`GAC_MODEL=moonshot-v1-8k` |
-| OpenRouter | `GAC_BASE_URL=https://openrouter.ai/api/v1`　`GAC_MODEL=...` |
-| Ollama（本地） | `GAC_BASE_URL=http://127.0.0.1:11434/v1`　`GAC_MODEL=qwen2.5-coder`　`GAC_API_KEY=ollama` |
-| Anthropic | `--provider anthropic`　`ANTHROPIC_API_KEY=sk-ant-...` |
-| 自建网关（如 magpie） | `GAC_BASE_URL=http://127.0.0.1:<port>/v1`　`GAC_MODEL=<网关里的模型名>` |
+| OpenAI | `GAC_API_KEY=sk-...` (default base URL and model) |
+| DeepSeek | `GAC_BASE_URL=https://api.deepseek.com/v1` `GAC_MODEL=deepseek-chat` |
+| Moonshot | `GAC_BASE_URL=https://api.moonshot.cn/v1` `GAC_MODEL=moonshot-v1-8k` |
+| OpenRouter | `GAC_BASE_URL=https://openrouter.ai/api/v1` `GAC_MODEL=...` |
+| Ollama (local) | `GAC_BASE_URL=http://127.0.0.1:11434/v1` `GAC_MODEL=qwen2.5-coder` `GAC_API_KEY=ollama` |
+| Anthropic | `--provider anthropic` `ANTHROPIC_API_KEY=sk-ant-...` |
+| Self-hosted gateway | `GAC_BASE_URL=http://127.0.0.1:<port>/v1` `GAC_MODEL=<model exposed by the gateway>` |
 
-Provider 也可以省略：模型名以 `claude` 开头或 base URL 含 `anthropic` 时会自动用 Anthropic 协议。
+The provider is detected automatically when the model starts with `claude` or the base URL contains
+`anthropic`; otherwise it defaults to `openai`.
 
-## 常用选项
+## Usage
 
-| 选项 | 作用 |
-| --- | --- |
-| `-y, --yes` | 不询问直接提交（适合脚本 / CI） |
-| `-n, --dry-run` | 只打印提交信息，不暂存、不提交 |
-| `-s, --staged` | 只提交已经 `git add` 的内容（默认提交整个工作区） |
-| `--split`, `--batches` | 让模型按逻辑关联把改动拆成多个 commit |
-| `--select` | 让模型自己挑选要提交的文件，其余保持未提交 |
-| `--push` | 提交后推送（无 upstream 时自动 `-u origin HEAD`） |
-| `--emoji` | 类型前加 emoji，如 `✨ feat: ...` |
-| `--plain` | 去掉 `type(scope):` 前缀 |
-| `--type <t>` / `--scope <s>` | 强制提交类型 / scope |
-| `--lang <en\|zh\|ja\|ko\|auto>` | 提交信息语言，默认 `en`；`auto` 跟随最近提交 |
-| `--max-diff-chars <n>` | diff 预算，默认 48000 字符 |
-| `--exclude <glob,...>` | 追加不进 prompt 的路径（锁文件等默认已排除） |
-| `--instructions <text>` | 附加给模型的额外要求 |
-| `--fallback` | 模型调用失败时用启发式信息兜底 |
-| `--no-verify` | 跳过 git hooks |
-| `--json` | stdout 只输出 JSON，方便脚本消费 |
-| `--debug` | 打印 HTTP / 重试细节 |
-
-完整列表：`gac --help`。
-
-确认阶段可以选 `e` 用 `$EDITOR` 修改提交信息。非交互环境（stdin 不是 TTY）不会自动确认，必须显式加 `--yes`。
-
-## 配置
-
-优先级：**命令行参数 > 环境变量 > 仓库配置 > 用户配置 > 默认值**
-
-```bash
-gac init                 # 在仓库写入 .gac.json
-gac config               # 查看解析后的配置（key 已脱敏）
-gac config --json        # 机器可读
+```text
+gac [options]                   Read the diff, ask the model, commit
+gac commit [options]            Same as above
+gac init [--force]              Write a starter .gac.json in this repository
+gac config                      Show the resolved configuration (API key masked)
+gac alias install [name]        Alias `git <name>` (default: auto-commit) to gac
+gac hook install [options]      Auto-commit after each agent turn
+gac hook uninstall [options]    Remove those hooks
+gac hook status                 Show which agents have the hook installed
 ```
 
-仓库级 `.gac.json`（或 `.git-auto-commit.json`）：
+| Option | Effect |
+| --- | --- |
+| `-y, --yes` | Commit without asking |
+| `-n, --dry-run` | Print the message, stage and commit nothing |
+| `-s, --staged` | Commit only what is already staged (default: the whole work tree) |
+| `--split`, `--batches` | Let the model split the change into several commits |
+| `--select` | Let the model choose which files to commit now; the rest stays uncommitted |
+| `--push` | Push after committing (`-u origin HEAD` when no upstream is set) |
+| `--emoji` | Prefix the subject with an emoji, e.g. `✨ feat: ...` |
+| `--plain` | Drop the `type(scope):` prefix |
+| `--type <type>` / `--scope <scope>` | Force the commit type or scope |
+| `--lang <en\|zh\|ja\|ko\|auto>` | Message language, default `en`; `auto` follows recent commits |
+| `--max-diff-chars <n>` | Diff budget in characters (default: 48000) |
+| `--exclude <glob,...>` | Extra paths whose diff body is omitted |
+| `--instructions <text>` | Extra instructions for the model |
+| `--fallback` | Build a heuristic message locally if the model call fails |
+| `--no-verify` | Skip git hooks |
+| `--json` | Machine-readable output on stdout (human logs go to stderr) |
+| `--debug` | Show HTTP and retry details |
+
+Run `gac --help` for the full list. During confirmation you can answer `e` to edit the message in
+`$EDITOR`.
+
+## Configuration
+
+Precedence: **flags > environment > repository config > user config > defaults**
+
+```bash
+gac init                 # write .gac.json in this repository
+gac config               # show the resolved configuration (key masked)
+gac config --json        # machine-readable
+```
+
+Repository config (`.gac.json` or `.git-auto-commit.json`):
 
 ```json
 {
@@ -149,98 +183,102 @@ gac config --json        # 机器可读
   "select": false,
   "emoji": false,
   "exclude": ["fixtures/**"],
-  "instructions": "scope 用模块名，不要写 ticket 号"
+  "instructions": "use module names as scope, never mention ticket numbers"
 }
 ```
 
-用户级 `~/.config/git-auto-commit/config.json` 支持同样的字段。API key 建议只放在环境变量里；
-若仓库配置里出现 `apiKey`，`gac` 会警告，因为它可能被提交。
+User-level defaults live in `~/.config/git-auto-commit/config.json` and accept the same keys.
+Keep API keys in environment variables; if a repository config contains `apiKey`, `gac` warns
+because the file may be committed.
 
-环境变量：`GAC_API_KEY`、`GAC_BASE_URL`、`GAC_MODEL`、`GAC_PROVIDER`、`GAC_LANGUAGE`、
-`GAC_MAX_DIFF_CHARS`、`GAC_INSTRUCTIONS`、`GAC_EXCLUDE`、`GAC_TEMPERATURE`、
-`GAC_MAX_TOKENS`、`GAC_TIMEOUT_MS`、`GAC_SPLIT`、`GAC_SELECT`、`GAC_EMOJI`、
-`GAC_NO_VERIFY`、`GAC_FALLBACK`、`GAC_PUSH`、`GAC_DEBUG`；`GAC_HOOK_DISABLED=1`
-可临时关闭 agent hooks。
+Environment variables: `GAC_API_KEY`, `GAC_BASE_URL`, `GAC_MODEL`, `GAC_PROVIDER`,
+`GAC_LANGUAGE`, `GAC_MAX_DIFF_CHARS`, `GAC_INSTRUCTIONS`, `GAC_EXCLUDE`, `GAC_TEMPERATURE`,
+`GAC_MAX_TOKENS`, `GAC_TIMEOUT_MS`, `GAC_SPLIT`, `GAC_SELECT`, `GAC_EMOJI`, `GAC_NO_VERIFY`,
+`GAC_FALLBACK`, `GAC_PUSH`, `GAC_DEBUG`, and `GAC_HOOK_DISABLED=1` to pause agent hooks.
 
-## 选择性提交与分批提交
+## Selective and batched commits
 
-默认一次提交全部改动。需要 AI 自己取舍时：
-
-```bash
-gac --select              # AI 挑一组相关文件提交，其余原样留在工作区
-gac --select --split      # 先挑文件，再拆成多个 commit（分批次）
-gac --split               # 全部改动，但拆成多个 commit
-```
-
-`--select` 的语义：
-
-- 模型只把“该一起提交”的文件放进 commit；没选中的文件（包括未跟踪文件）不会被暂存或提交。
-- 即使你的暂存区里还有别的文件，也不会被顺带提交（每个 commit 都按文件路径限定）。
-- 提交结束后会打印 `Left uncommitted N file(s): ...`；`--json` 输出里对应 `uncommitted` 字段。
-- 模型一个文件都没选时直接报错，不会退化成“提交全部”。
-
-选择粒度是**文件级**：不做同一个文件内部的 hunk 级拆分，也不支持交互式逐块选择。
-
-## Agent hooks：每轮结束自动提交
-
-`gac` 可以作为 Claude Code、Codex、OpenCode 的收尾钩子：一轮回复结束后自动读取 diff 并提交，
-没有改动就立即退出。
+By default one run commits every change. When you want the model to make choices:
 
 ```bash
-gac hook install                    # 三个 agent，用户级（默认）
-gac hook install --agent claude     # 只装一个
-gac hook install --agent all --select --split   # 把行为参数一起固化进 hook
-gac hook install --agent codex --project       # 只对当前仓库生效
-gac hook status                     # 查看安装状态
-gac hook uninstall --agent all      # 卸载
+gac --select          # AI picks a coherent set of files, the rest stays uncommitted
+gac --select --split  # pick files, then group them into several commits
+gac --split           # commit everything, but in several commits
 ```
 
-| Agent | 用户级位置 | 项目级位置 | 触发事件 |
+`--select` semantics:
+
+- Only the files the model lists are staged and committed; everything else (including untracked
+  files) is left untouched.
+- Files that were already staged are not swept in; every commit is restricted to its own paths.
+- After committing, `gac` prints `Left uncommitted N file(s): ...`; `--json` exposes `uncommitted`.
+- If the model selects no file, `gac` fails instead of falling back to "commit everything".
+
+Selection is file-level: `gac` does not split hunks inside a single file.
+
+## Agent hooks
+
+`gac` can run at the end of every agent turn: it reads the diff, commits if there is anything to
+commit, and exits silently otherwise.
+
+```bash
+gac hook install                    # all three agents, user scope (default)
+gac hook install --agent claude     # just one
+gac hook install --agent all --select --split   # bake behaviour flags into the hook
+gac hook install --agent codex --project        # only this repository
+gac hook status
+gac hook uninstall --agent all
+```
+
+| Agent | User scope | Project scope | Event |
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/settings.json` | `.claude/settings.json` | `Stop` |
 | Codex | `~/.codex/hooks.json` | `.codex/hooks.json` | `Stop` |
-| OpenCode | `~/.config/opencode/plugins/gac-auto-commit.ts` | `.opencode/plugins/gac-auto-commit.ts` | `session.idle`（v2 插件，兼容 v1 `server`） |
+| OpenCode | `~/.config/opencode/plugins/gac-auto-commit.ts` | `.opencode/plugins/gac-auto-commit.ts` | `session.idle` |
 
-安装时会**合并**而不是覆盖：保留你已有的 hooks，重复安装只替换 gac 自己的那条，并在原文件旁生成
-`.gac.bak` 备份。hook 里写入的是 gac 可执行文件的绝对路径（编译版即 `~/.local/bin/gac`）。
+Installation merges instead of overwriting: existing hooks stay in place, reinstalling replaces only
+`gac`'s entry, and the original file is copied to `.gac.bak`. The generated command uses the absolute
+path of the `gac` executable.
 
-安全策略：
+Safety rules:
 
-- 只在有改动时调用模型；干净工作区直接退出，不产生 API 费用。
-- 进行中的 merge / rebase / cherry-pick / revert / bisect、detached HEAD 一律跳过。
-- 用 `.git/gac-hook.lock` 防止并发重复提交（10 分钟自动过期）。
-- Claude 的 `stop_hook_active` 会跳过，避免递归触发。
-- hook 不向 stdout 输出内容，出错也返回 0，绝不打断 agent；结果写到 `.git/gac-hook.log`。
-- 临时关闭：`export GAC_HOOK_DISABLED=1`。
-- Codex 需要开启 hooks 特性（`[features] hooks = true`），缺失时安装会提示。
-- 想在 hook 里用选择性/分批提交，安装时直接加参数：`gac hook install --select`、`--split`、`--lang zh` 等。
+- No changes → no model call, no cost.
+- Skipped during merge, rebase, cherry-pick, revert and bisect, and on a detached HEAD.
+- `.git/gac-hook.lock` prevents concurrent runs (stale after ten minutes).
+- Claude's `stop_hook_active` is respected to avoid recursive hooks.
+- Hook runs write nothing to stdout and always exit 0, so a failed commit cannot break the turn.
+  Results go to `.git/gac-hook.log`.
+- Disable temporarily with `GAC_HOOK_DISABLED=1`.
+- Codex needs `[features] hooks = true`; the installer warns when it is missing.
 
-## 它具体做了什么
+## How it works
 
-1. **收集改动**：`git status --porcelain -z` 拿文件清单，`git diff HEAD` 拿补丁，
-   未跟踪文件会合成 `new file` 补丁（二进制/超大文件只报大小）。没有 commit 的仓库用空树对比。
-2. **控制预算**：锁文件、`dist/`、`node_modules/` 等默认只列文件名不带 diff；
-   超出 `maxDiffChars` 时按文件截断，并在 prompt 里明确告诉模型哪些内容被省略。
-3. **写 prompt**：带上当前分支、最近 10 条提交（对齐风格）、文件改动统计和 diff；
-   要求只输出 JSON，`--split` 时还要求每个文件恰好属于一个 commit。
-4. **校验模型输出**：兼容裸 JSON、代码块、夹在说明文字里的 JSON；
-   类型别名归一（`feature` → `feat`），subject 去句号、压空格、限长，
-   scope 小写化，路径必须来自真实改动列表；模型漏掉的文件会补进最后一个 commit。
-5. **安全提交**：默认先 `git add` 再提交；`--split` 的后续 commit 用 pathspec 只包含各自文件；
-   `--staged` 模式下如果某文件还有未暂存的修改，会放弃拆分改为单个 commit，
-   避免把未暂存的内容带进去。提交失败（hook 拒绝、无内容等）会保留现场并给出提示。
+1. **Collect** — `git status --porcelain -z` lists the files, `git diff HEAD` collects the patch,
+   untracked files and symlinks are turned into `new file` patches. Repositories without a commit
+   are diffed against the empty tree.
+2. **Budget** — lockfiles, `dist/`, `node_modules/` and similar paths are listed by name without
+   their diff body. Beyond `--max-diff-chars`, files are cut and the model is told what was omitted.
+3. **Prompt** — the branch, the last ten commit subjects (for style), file stats and the diff are
+   sent with a strict JSON-only instruction. With `--split`, every file must belong to exactly one
+   commit.
+4. **Validate** — JSON is extracted from prose or code fences; type aliases are normalised, subjects
+   are trimmed and length-limited, scopes lower-cased, paths must exist in the real change set, and
+   files the model forgot are appended to the last commit.
+5. **Commit** — the default mode stages everything and commits. `--split` uses per-file pathspecs;
+   `--select` stages and commits only the chosen files. Deletions, renames and staged deletions are
+   handled explicitly.
 
-## 在脚本 / CI 里用
+## Scripting and CI
 
 ```bash
-# 只检查模型会写什么，不落盘
+# preview the message without touching the repository
 gac --dry-run --json | jq -r '.messages[0].subject'
 
-# 自动提交 + 推送
-gac --yes --push
+# commit and push unattended
+gac -y --push
 ```
 
-`--json` 输出结构：
+`--json` output:
 
 ```json
 {
@@ -249,33 +287,38 @@ gac --yes --push
   "plan": [{ "type": "feat", "subject": "add retry", "files": ["src/a.ts"] }],
   "messages": [{ "subject": "feat: add retry", "body": "..." }],
   "committed": [{ "sha": "4f2a9c1", "subject": "feat: add retry", "files": ["src/a.ts"] }],
-  "uncommitted": ["src/wip.ts"],
+  "uncommitted": [],
   "pushed": false,
   "usage": { "inputTokens": 1820, "outputTokens": 76 }
 }
 ```
 
-## 已知边界
+Exit codes: `0` success, `1` runtime failure, `2` usage error. With `--json`, stdout contains only
+JSON.
 
-- 只处理文本 diff；二进制文件只作为文件名出现。
-- `--split` 会让每个 commit 单独触发一次 pre-commit hook，lint-staged 之类的工具需要能接受部分暂存。
-- 没有 `--amend` / rebase 能力，它只负责新提交。
-- `--select` 是文件级选择，不会拆分同一个文件里的不同改动。
-- hook 自动提交意味着每轮改动都会进入 git 历史；需要人工把关时先关掉 hook 或加 `--dry-run`。
-- diff 是 prompt 的一部分，模型输出质量取决于模型本身；用 `--max-diff-chars` 控制成本。
+## Limitations
 
-## 开发
+- Text diffs only; binary files appear by name.
+- `--split` runs the pre-commit hook once per commit, so tools like lint-staged must accept partial
+  staging.
+- No `--amend` or rebase support; `gac` only creates new commits.
+- `--select` is file-level and cannot pick individual hunks.
+- Commit quality depends on the model; tune `--max-diff-chars` to control cost and context.
+
+## Development
 
 ```bash
-npm install
-npm test          # node --test，内置假模型服务器，无需联网/API key
-npm run test:binary  # 编译单文件后再跑一遍 e2e（没装 bun 会自动跳过）
+npm ci
+npm test             # node --test, uses a fake model server; no network or API key
 npm run typecheck
-npm run build     # 产出 dist/ 与 .d.ts
+npm run build        # dist/ and .d.ts
 node src/cli.ts --help
 ```
 
-也可以作为库使用：
+The test suite covers diff collection, prompt building, model retries, plan validation, selective and
+split commits, agent hooks, and the standalone binary (skipped when Bun is not installed).
+
+### Library usage
 
 ```ts
 import { repoRoot, resolveSettings, runAutoCommit } from "git-auto-commit";
@@ -288,4 +331,4 @@ console.log(result.committed);
 
 ## License
 
-MIT
+MIT © [ZhenYi](https://github.com/lazhenyi)
