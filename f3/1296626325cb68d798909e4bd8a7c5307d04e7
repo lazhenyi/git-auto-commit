@@ -1,0 +1,19 @@
+test/cli.test.ts
+  s_4d4b6efa4908e2::t_3a3a536edc8431 602-620
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f31296626325cb68d798909e4bd8a7c5307d04e7",
+  "prompts": {},
+  "sessions": {
+    "s_4d4b6efa4908e2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1ae54-b2b1-7290-9a70-f41ae234ac85",
+        "model": "deepseek-flash"
+      },
+      "human_author": "ZhenYi <434836402@qq.com>"
+    }
+  }
+}
