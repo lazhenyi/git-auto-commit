@@ -59,7 +59,7 @@ jobs:
         run: |
           set -eu
           cd release
-          sha256sum ./* > SHA256SUMS
+          sha256sum ./* | sed 's#  \./#  #' > SHA256SUMS
           cat SHA256SUMS
       - name: Publish release
         env:

@@ -4,7 +4,6 @@
 set -eu
 
 REPO="${GAC_REPO:-lazhenyi/git-auto-commit}"
-API="https://api.github.com/repos/$REPO/releases"
 VERSION="${GAC_VERSION:-}"
 INSTALL_DIR="${GAC_INSTALL_DIR:-}"
 BIN="gac"
@@ -93,34 +92,22 @@ asset="gac-$os-$arch"
 
 if [ -n "$VERSION" ]; then
   tag=$(printf '%s' "$VERSION" | sed 's/^v//')
-  release_url="$API/tags/v$tag"
+  base="https://github.com/$REPO/releases/download/v$tag"
   label="v$tag"
 else
-  release_url="$API/latest"
+  base="https://github.com/$REPO/releases/latest/download"
   label="latest"
 fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-download "$release_url" "$tmp/release.json" 2>/dev/null ||
-  die "could not fetch the $label release. Check https://github.com/$REPO/releases"
+printf 'Downloading %s (%s)...\n' "$asset" "$label"
+download "$base/$asset" "$tmp/$asset" ||
+  die "could not download $asset for $label. See https://github.com/$REPO/releases"
 
-asset_url=$(grep -o '"browser_download_url":[[:space:]]*"[^"]*"' "$tmp/release.json" |
-  sed 's/.*"\(https[^"]*\)".*/\1/' |
-  grep -F "/$asset" |
-  head -n 1 || true)
-[ -n "$asset_url" ] || die "release $label has no asset named $asset"
-
-printf 'Downloading %s...\n' "$asset"
-download "$asset_url" "$tmp/$asset" || die "download failed: $asset_url"
-
-sums_url=$(grep -o '"browser_download_url":[[:space:]]*"[^"]*"' "$tmp/release.json" |
-  sed 's/.*"\(https[^"]*\)".*/\1/' |
-  grep -F "/SHA256SUMS" |
-  head -n 1 || true)
-if [ -n "$sums_url" ] && download "$sums_url" "$tmp/SHA256SUMS" 2>/dev/null; then
-  expected=$(grep " $asset\$" "$tmp/SHA256SUMS" | awk '{print $1}' | head -n 1 || true)
+if download "$base/SHA256SUMS" "$tmp/SHA256SUMS" 2>/dev/null; then
+  expected=$(awk -v asset="$asset" '$2 == asset || $2 == "./" asset { print $1; exit }' "$tmp/SHA256SUMS")
   if [ -n "$expected" ]; then
     if command -v sha256sum >/dev/null 2>&1; then
       actual=$(sha256sum "$tmp/$asset" | awk '{print $1}')
