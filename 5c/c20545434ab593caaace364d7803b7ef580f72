@@ -1,0 +1,35 @@
+src/hook.ts
+  s_4d4b6efa4908e2::t_7ad402f0d6970f 603,606-616,620-639,641
+  s_4d4b6efa4908e2::t_9e01b2c1c10d76 1-602,604-605,617-619,640,642-652
+test/hook.test.ts
+  s_4d4b6efa4908e2::t_57a717ffc30138 97
+  s_4d4b6efa4908e2::t_2d96a1f068a45c 1-96,98-239
+README.md
+  s_4d4b6efa4908e2::t_77c55e43343654 162-163,184-217,264
+src/types.ts
+  s_4d4b6efa4908e2::t_45c30a6f02e4e2 153-155
+src/cli.ts
+  s_4d4b6efa4908e2::t_45c30a6f02e4e2 10-18,40,56,171-175,214-221,225
+  s_4d4b6efa4908e2::t_fa5901c999ec2e 108-112,269-312,317-333,373-375
+  s_4d4b6efa4908e2::t_7ad402f0d6970f 313-316
+  s_4d4b6efa4908e2::t_dd33aeeebbdc7e 376
+test/helpers.ts
+  s_4d4b6efa4908e2::t_2d96a1f068a45c 189-190,195-197,202,207
+  s_4d4b6efa4908e2::t_57a717ffc30138 210-211,214,217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5cc20545434ab593caaace364d7803b7ef580f72",
+  "prompts": {},
+  "sessions": {
+    "s_4d4b6efa4908e2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1ae54-b2b1-7290-9a70-f41ae234ac85",
+        "model": "deepseek-flash"
+      },
+      "human_author": "ZhenYi <434836402@qq.com>"
+    }
+  }
+}
